@@ -10,7 +10,7 @@ if (! is.null(DB_HOST))
 # -------------------------------------------------------------------------------------------------
 
 importDataset <- function(dbName, inputFolder, dbUser = DB_USER, dbPassword = DB_PASSWORD, host = DB_HOST) {
-    sql.connect(username = dbUser, password = dbPassword, dbName = dbName, host = DB_HOST)
+    sql.connect(username = dbUser, password = dbPassword, dbname = dbName, host = DB_HOST)
     importCommonData(inputFolder)
     createCommonIndices()
     calculateProjectSizes()
@@ -18,13 +18,13 @@ importDataset <- function(dbName, inputFolder, dbUser = DB_USER, dbPassword = DB
 }
 
 importJSExtras <- function(dbName, inputFolder, dbUser = DB_USER, dbPassword = DB_PASSWORD, host = DB_HOST) {
-    sql.connect(username = dbUser, password = dbPassword, dbName = dbName, host = DB_HOST)
+    sql.connect(username = dbUser, password = dbPassword, dbname = dbName, host = DB_HOST)
     importJSData(inputFolder)
     sql.disconnect()
 }
 
 importAndCreateJS_NPM <- function(dbName, dbOrigin, inputFolder, dbUser = DB_USER, dbPassword = DB_PASSWORD, host = DB_HOST) {
-    sql.connect(username = dbUser, password = dbPassword, dbName = dbOrigin, host = DB_HOST)
+    sql.connect(username = dbUser, password = dbPassword, dbname = dbOrigin, host = DB_HOST)
     importNPMInfo(inputFolder)
     sql.switchDb(dbName)
     createNonNPMDataset(dbOrigin)
@@ -32,7 +32,7 @@ importAndCreateJS_NPM <- function(dbName, dbOrigin, inputFolder, dbUser = DB_USE
 }
 
 exportCloneFinderData <- function(dbName, outputFolder, threshold = 0, dbUser = DB_USER, dbPassword = DB_PASSWORD, host = DB_HOST) {
-    sql.connect(username = dbUser, password = dbPassword, dbName = dbOrigin, host = DB_HOST)
+    sql.connect(username = dbUser, password = dbPassword, dbname = dbOrigin, host = DB_HOST)
     println("exporting clone finder input data")
     println("  creating clone finder's input...")
     sql.query("SELECT projectId, totalTokens, tokenHash FROM files JOIN stats ON files.fileHash = stats.fileHash WHERE totalTokens > ",threshold," INTO OUTFILE \"", outputFolder, "/clone_finder.csv\" FIELDS TERMINATED BY ','");
@@ -40,7 +40,7 @@ exportCloneFinderData <- function(dbName, outputFolder, threshold = 0, dbUser = 
 }
 
 importCloneFinderData <- function(dbName, inputFolder, numThreads, dbUser = DB_USER, dbPassword = DB_PASSWORD, host = DB_HOST) {
-    sql.connect(username = dbUser, password = dbPassword, dbName = dbOrigin, host = DB_HOST)
+    sql.connect(username = dbUser, password = dbPassword, dbname = dbOrigin, host = DB_HOST)
     println("  creating cf table projectClones")
     println("    dropping if exists", sql.dropTable("projectClones"))
     println("    creating", sql.createTable("projectClones","
@@ -69,6 +69,43 @@ importCloneFinderData <- function(dbName, inputFolder, numThreads, dbUser = DB_U
     println("      ", sql.createIndex("projectClones", "hostAffectedPercent", unique = F))
     sql.disconnect()    
 }
+
+
+downloadMetadata <- function(dataset, outputDir, secrets, user, password, host = "localhost", stride = 0, strides = 1) {
+    library(RCurl)
+    library(rjson)
+    sql.connect(user = user, password = password, dbname = dataset, host = host)
+    # now get all the projects we want to get metadata for
+    projects = sql.query("SELECT projectId, projectUrl FROM projects ORDER BY projectId")
+    sql.disconnect()
+    numProjects = length(projects$projectId)
+    println("total projects: ", numProjects)
+    f = file(paste(outputDir, "projects_metadata.txt", sep = "/"), "wt")
+    si = 1L
+    errors = 0
+    i = stride
+    while (i <= numProjects) {
+        secret = secrets[[si]]
+        si = si + 1L
+        if (si > length(secrets))
+            si = 1L
+        x = getProjectMetadata(projects$projectId[[i]], projects$projectUrl[[i]], secret)
+        if (x$stars == "NULL") {
+            cat(paste(x$id, "-1,-1,-1,-1\n", sep = ","), file = f)
+            errors = errors + 1
+        } else {
+            cat(paste(x$id, x$stars, x$subscribers, x$forks, x$openIssues, sep = ","), file = f)
+            cat("\n", file = f)
+        }
+        i = i + strides
+        if (i %% 1000 == 0)
+            println("   ", i, " errors: ", errors)
+        
+    }
+    println("   TOTAL ERRORS: ", errors)
+    close(f)
+}
+
 
 # -------------------------------------------------------------------------------------------------
 # All Datasets
@@ -132,6 +169,17 @@ calculateProjectSizes <- function() {
     println("  projects table updated")
     sql.query("DROP TABLE projects_files;")
     println("  deleted temporary tables")
+}
+
+getProjectMetadata <- function(pid, url, secret) {
+    url = paste("https://api.github.com/repos/", url, sep = "")
+    result = list(id = pid)
+    x = fromJSON(getURL(url, USERAGENT = "prl-prg", FOLLOWLOCATION = T, HTTPHEADER = paste("Authorization: token ", secret, sep = "")))
+    result$stars = x["stargazers_count"]
+    result$subscribers = x["subscribers_count"]
+    result$forks = x["forks_count"]
+    result$openIssues = x["open_issues_count"]
+    result
 }
 
 # -------------------------------------------------------------------------------------------------
@@ -210,14 +258,12 @@ importNPMInfo <- function(inputFolder) {
 
 # Takes the origin database (which should have npm info already present) and creates projects files & stats tables in current database containing only those not in npm modules 
 createNonNPMDataset <- function(origin) {
-    println("switching to database", database)
-    sql.switchDb(database)
     println("copying only NPM data...")
     sql.query("CREATE TABLE projects AS SELECT projectId, projectUrl, createdAt, commit FROM ", origin, ".projects")
     println("  projects")
-    sql.query("CREATE TABLE files AS SELECT fileId, projectId, relativeUrl, fileHash, createdAt, test FROM ", origin, ".files")
+    sql.query("CREATE TABLE files AS SELECT fileId, projectId, relativeUrl, fileHash, createdAt, test FROM ", origin, ".files WHERE npm = 0")
     println("  files")
-    sql.query("CREATE TABLE stats AS SELECT * FROM ", origin, ".stats WHERE fileHash IN (SELECT UNIQUE fileHash FROM files)")
+    sql.query("CREATE TABLE stats AS SELECT * FROM ", origin, ".stats WHERE fileHash IN (SELECT DISTINCT fileHash FROM files)")
     println("  stats")
     createCommonIndices()
     calculateProjectSizes()

@@ -16,6 +16,8 @@ Many of the steps mentioned below take unfeasible ammounts of time for the revie
 
 > Reasonably performant machine with ideally a lot of RAM helps a lot. JavaScript took about 6 hours to import & index the basic database, another 5 hours for the non-NPM dataset. 
 
+- [download projects metadata](docs/metadata.md)
+
 - [create project clones information](docs/project_clones.md)
 
 > Project cloning information for all non-empty files took around 5 hours. Data import is another 7 hours.
