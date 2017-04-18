@@ -1,12 +1,3 @@
-# TODO for paper
-
-- import dataset
-- create non-npm dataset
-- redo clone finder so that we have confidence in the data
-- redo the graphs
-- 
-
-
 # Reproducing the GitHub Analysis 
 
 This repository contains the necessary information to reproduce the github analysis paper for the languages presented. 
