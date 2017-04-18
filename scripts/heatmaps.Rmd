@@ -1,0 +1,157 @@
+---
+title: "Heatmap"
+output: html_notebook
+---
+
+Prerequisites for the computation are:
+
+- `files.txt.2hi` which is the `files` table csv dump where all fileHashes are converted to unique identifiers, this can be created by running the following on `files.csv` dump:
+
+    java SccPreprocessor h2i PATH_TO_DATASET
+    
+- `projects_heat.csv` which contains pid, stars and commits for each project
+- `project_clones.csv` which contains the clone finder's output
+
+When you have these, running
+
+    java SccPreprocessor originals PATH_TO_DATASET
+    
+produces `heatmap.csv`, which contains for each project a row with the following:
+
+- project id
+- number of stars 
+- number of commits
+- number of original files in the project
+- number of clones the project contains
+
+> The number of projects is taken at 0.8 threshold currently, and just takes everything that is in `project_clones`.
+
+Note that because the UCI languages have different layouts, an updated SccPreprocessor from the `uci` branch must be used. 
+
+## Loading the data
+
+```{r}
+lang = "js"
+
+if (lang == "js") {
+    data = read.csv("/data/ecoop17/datasets/jsHalf/heatmap.csv", header = F, col.names = c("pid", "stars", "commits", "files", "originalFiles","containsClones"))
+} else  {
+    data = read.csv(paste("/data/ecoop17/datasets/",lang,"/heatmap.csv", sep=""), header = F, col.names = c("pid", "stars", "commits", "files", "originalFiles","containsClones"))
+}
+```
+
+## Creating the data frame
+
+> TODO bin size is 0.2 (log10) fixed, but it is easy to change. 
+
+First select whether y axis should be number of commits or number of stars.
+
+```{r}
+y_axis = "commits"
+#y_axis = "stars"
+```
+
+Then process the data and sum them up in the matrix, then convert the matrix to dataframe, this is definitely the best R code out there, but does the job:
+
+```{r}
+# create the matrix
+len_x = ceiling(log10(max(data$files) + 1) / 0.2) + 1
+len_y = ceiling(log10(max(data[[y_axis]]) + 1) / 0.2) + 1
+density = matrix(0, len_x, len_y)
+sumFiles = matrix(0, len_x, len_y)
+sumOriginalFiles = matrix(0, len_x, len_y)
+sumContainsClones = matrix(0, len_x, len_y) 
+total = 0
+#for (i in 1:10000) {
+for (i in 1:length(data$files)) {
+    x = ceiling(log10(data$files[[i]] + 1) / 0.2) + 1
+    y = ceiling(log10(data[[y_axis]][[i]] + 1) / 0.2) + 1
+    density[x,y] = density[x,y] + 1
+    sumFiles[x,y] = sumFiles[x,y] + data$files[[i]]
+    sumOriginalFiles[x,y] = sumOriginalFiles[x,y] + data$originalFiles[[i]]
+    sumContainsClones[x,y] = sumContainsClones[x,y] + data$containsClones[[i]]
+    total = total + 1
+}
+
+```
+
+```{r}
+
+# convert the matrix to data.frame
+files = double()
+stars = double()
+d = double()
+sf = double()
+sof = double()
+scc = double()
+originality = double()
+avgClones = double()
+#for (i in 1:len_x) {
+#    for (j in 1:len_y) {
+for (i in 3:25) {
+    for (j in 3:25) {
+        files = c(files, (i - 1) * 0.2)
+        stars = c(stars, (j - 1) * 0.2)
+        d = c(d, density[i,j])
+        sf = c(sf, sumFiles[i,j])
+        sof = c(sof, sumOriginalFiles[i,j])
+        scc = c(scc, sumContainsClones[i,j])
+        originality = c(originality, sumOriginalFiles[i, j] / sumFiles[i,j])
+        avgClones = c(avgClones, sumContainsClones[i, j] / density[i,j])
+    } 
+}
+heat_data = data.frame(files = files, yaxis = stars, density = d, Clones = originality, avgClones = avgClones, sumFiles = sf, sumOriginalFiles = sof, sumContainsClones = scc)
+
+plain <- function(x,...) {
+   format(x, ..., scientific = FALSE, trim = TRUE)
+}
+
+```
+
+## Graphs
+
+> They are ugly, also the cross is due to some errors in the log function I apply to the data, I will fix that in the evening...
+
+```{r}
+g = ggplot(heat_data, aes(files, yaxis))
+g = g + geom_raster(aes(fill = Clones))
+#g = g + scale_fill_gradient(low = "red", high = "green", limits = c(1, 0), breaks = c(0.25, 0.5, 0.75))
+g = g + scale_fill_gradient(low = "white", high = "red", limits = c(1, 0), breaks = c(0.25, 0.5, 0.75))
+g = g + scale_x_continuous("Files per Project", labels = function(x) plain(10**x))
+g = g + scale_y_continuous("Commits", labels = function(x) plain(10**x))
+g = g + geom_text(aes(label = round(100 - Clones * 100, 0)), size = 3)
+g = g + theme(panel.background = element_rect(color = "black", fill="white"), panel.spacing = unit(c(0,0,0,0), "points"))
+g = g + coord_cartesian(c(0.45, 4.75), c(0.45, 4.75))
+#g = g + scale_fill_continuous(limits=c(1, 0), breaks=seq(1,0,by=-0.25))
+g = g + theme(axis.title.x=element_blank(), axis.title.y = element_blank())
+ggsave(paste("heatmap_",lang,".pdf", sep = ""), width = 68 * 2.5, height = 68 * 2.5, units = "mm")
+
+g
+```
+
+Python:
+ Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+0.01522 0.29010 0.60170 0.51830 0.72940 0.93050 
+
+C++
+ Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.1366  0.4143  0.6991  0.6200  0.8167  1.0000
+
+
+This shows the originality of projects based on the file sizes and number of commits (because we aggreated over commits at first). This seems to be informative enough, i.e. the smaller projects are more original and projects with more commits tend to be more original too. 
+
+```{r}
+g = ggplot(heat_data, aes(files, yaxis))
+g = g + geom_raster(aes(fill = avgClones))
+g
+```
+
+This is number of averga clones the projects contain. The larger the projects, the more clones they contain in general, but number of commits does not seem to have such an effect on it. 
+
+```{r}
+g = ggplot(heat_data, aes(files, yaxis))
+g = g + geom_raster(aes(fill = log10(density)))
+g
+```
+
+Here's density of the projects, smaller and fewer commits are more frequent than larger and more commits. 

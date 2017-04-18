@@ -24,9 +24,22 @@ where:
 - `user`, `password` and `host` are the database connection arguments
 - `stride` is the current stride and `strides` is the max number of strides, which can be used to run multiple instances at the same time (i.e. each `strides` project will be downloaded, starting from `stride`-th)
 
-> TODO data import
+To import the data, use the `importMetadata` function in `functions.R`:
+
+    importMetadata("js", "/datasets/js", strides, user, password, host)
+    
+Where `js` is the database name, where `projects` table will be augmented with the metadata, followed by the path to the downloader outputs, number of strides executed and database connection arguments. 
 
 ## Getting Commit Numbers
 
-> TODO
+The number of commits is obtained from GHTorrent's tables. Given the downloaded projects and the GHTorrent commits data (`projects_commits.csv`), we can run the `sccpreprocessor` to calculate the number of commits per project:
+
+    java SccPreprocessor commits PATH_TO_DATASET PATH_TO_PROJECTS_COMMITS_GHTORRENT
+
+To import the data, use the `importCommits` function in `functions.R`:
+
+    importCommits("js", "/datasets/js", user, password, host)
+    
+Where `js` is the database name, where `projects` table will be augmented with the commits information, followed by the path to the downloader outputs and database connection arguments. 
+    
 

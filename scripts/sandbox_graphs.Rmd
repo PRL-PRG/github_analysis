@@ -1,0 +1,481 @@
+---
+title: "Graphs sandbox"
+output: html_notebook
+---
+
+> NOTE this is sandbox, I am only archiving it in case it contains useful information, which it most likely does not:)
+
+# Tasklist
+
+## Todo
+
+- NPM and modules statistics for JS (working...)
+- create a proper repo
+- get data for other languages (pending)
+- verify and ingest metadata
+ 
+
+## Already done
+
+- entire GH merged & sorted
+- tokenizer output imported to DB
+- project clones at 2 tokens threshold
+- importing project clones result to database
+- import scripts created
+
+# Better Graphs & new analyses
+
+- get projects created at other languages (from the raw data + gh torrent)
+- use project age in project clones to cut down sizes and to offer clones and originals estimates
+
+```{r}
+#sql.disconnect() # so that connections are deleted
+source("db.R")
+```
+
+
+```{r}
+USERNAME = "???"
+PASSWORD = "???"
+DBNAME = "jsHalf"
+sql.connect(username = USERNAME, password = PASSWORD, dbname = DBNAME)
+```
+
+
+Summaries of various stuffz
+
+```{r}
+x = sql.query("SELECT files, stars, commits FROM projects")
+summary(x$files)
+summary(x$stars)
+summary(x$commits);
+```
+
+```{r}
+x = sql.query("SELECT fileSLOC FROM files JOIN stats ON files.fileHash = stats.fileHash")
+summary(x)
+x = NULL
+```
+
+
+
+
+```{r}
+logHistogramDouble = function(query, db1, db1Title, db2, db2Title, title, xtitle, ytitle, filename = NULL, query2 = query) {
+    colors = c("red", "blue")
+    names(colors) = c(db1Title, db2Title)
+    linetypes = c("Median" = "solid", "Mean" = "dashed")
+    
+    # get the input data
+    sql.query("USE ", db1)
+    first = sql.query(query)[[1]];
+    sql.query("USE ", db2)
+    second = sql.query(query2)[[1]];
+    # make lengths the same
+    maxl = max(length(first), length(second))
+    length(first) = maxl
+    length(second) = maxl
+    # create the dataframe
+    data = data.frame(first = first, second = second)
+    # calculate the breaks so that we fill the range
+    breaks = 1
+    i = 1
+    m = max(max(first, na.rm = T), max(second, na.rm = T))
+    repeat {
+        i = i * 10
+        breaks = c(breaks, i + 1)
+        if (log10(i + 1) > m)
+            break
+    }
+    breaks = log10(breaks)
+    # create the graph
+
+
+    g = ggplot(data)
+    g = g + geom_histogram(binwidth = 0.2, boundary = 0, aes(x = log10(first + 1), y=..count../sum(..count..), fill = db1Title), alpha = 0.5)
+    g = g + geom_histogram(binwidth = 0.2, boundary = 0, aes(x = log10(second + 1), y=..count../sum(..count..), fill = db2Title), alpha = 0.5, show.legend = T)
+    
+    first_mean = log10(mean(first, na.rm = T) + 1)
+    first_median = log10(median(first, na.rm = T) + 1)
+    g <- g + geom_vline(aes(xintercept = first_mean, linetype = "Mean", color = db1Title), alpha = 0.7)
+    g <- g + geom_vline(aes(xintercept = first_median, linetype = "Median", color = db1Title), alpha = 0.7)
+
+    second_mean = log10(mean(second, na.rm = T) + 1)
+    second_median = log10(median(second, na.rm = T) + 1)
+    g <- g + geom_vline(aes(xintercept = second_mean, linetype = "Mean", color = db2Title), alpha = 0.7)
+    g <- g + geom_vline(aes(xintercept = second_median, linetype = "Median", color = db2Title), alpha = 0.7)
+    
+    
+    #g = g + geom_vline(aes(xintercept = log10(mean(js, na.rm = T) + 1), linetype = "Mean", color = "JavaScript"), alpha = 0.5)
+    #g = g + geom_vline(aes(xintercept = log10(median(js, na.rm = T) + 1), linetype = "Median", color = "JavaScript"), alpha = 0.5)
+    
+    #g = g + geom_vline(aes(xintercept = log10(mean(cpp, na.rm = T) + 1), linetype = "Mean", color = "JavaScript w/o NPM"), alpha = 0.5)
+    #g = g + geom_vline(aes(xintercept = log10(median(cpp, na.rm = T) + 1), linetype = "Median", color = "JavaScript w/o NPM"), alpha = 0.5)
+    g = g +scale_x_continuous(paste(xtitle, "(log)"), labels = function(x) plain(10**x - 1), breaks = breaks) + theme(axis.text.y = element_text(angle=90, hjust = 0.5)) + scale_y_continuous(ytitle, labels=function(x) x * 100)
+    g = g + scale_fill_manual(name="Languages",values = colors)
+    g = g + scale_linetype_manual(name="Statistics", values = linetypes)
+    g = g + scale_color_manual(values=colors, guide = "none")
+    
+    g = g + ggtitle(title)
+    g = g + theme(plot.title = element_text(hjust = 0.5))
+    if (!is.null(filename))
+        ggsave(filename, width = 68 * 2.5, height = 55 * 2.5, units = "mm")
+    g
+
+}
+
+logHistogramDouble("SELECT files FROM projects", "js", "JavaScript", "js_nonpm", "JavaScript w/o NPM", "JavaScript", "Number of files", "% of projects", "Hist_files_per_project_js.pdf")
+
+#logHistogramDouble("SELECT stars FROM projects", "js", "JavaScript", "js_nonpm", "JavaScript w/o NPM", "JavaScript", "Number of stars", "% of projects", "Hist_stars_per_project_js.pdf", "SELECT stars FROM projects JOIN js.projects AS x ON projects.projectId = x.projectId WHERE projects.files = x.files")
+
+#logHistogramDouble("SELECT commits FROM projects", "js", "JavaScript", "js_nonpm", "JavaScript w/o NPM", "JavaScript", "Number of stars", "% of projects", "Hist_commits_per_project_js.pdf", "SELECT commits FROM projects JOIN js.projects AS x ON projects.projectId = x.projectId WHERE projects.files = x.files")
+
+
+```
+
+
+```{r}
+# I need to create a dataframe that would contain the counts manually
+
+test = data.frame(sloc = log10(testSLOC[[1]]), counts = testSLOC[[2]])
+```
+
+
+
+
+```{r}
+counts = integer()
+nextBreak = 0.2
+currentCount = 0
+for (i in 1:length(test$sloc)) {
+    if (test$sloc[[i]] >= nextBreak) {
+        counts = c(counts, currentCount)
+        currentCount = 0;
+        nextBreak = nextBreak + 0.2
+    }
+    currentCount = currentCount + test$counts[[i]]
+}
+counts = c(counts, currentCount)
+tc = data.frame(x = 1:length(counts) * 0.2, counts = counts)
+
+```
+
+```{r}
+g = ggplot(tc, aes(x = x, y = counts))
+g = g + geom_bar(x = x, y = counts)
+g
+
+```
+
+
+
+```{r}
+testSLOC = sql.query("SELECT fileSLOC, COUNT(*) FROM files_ne JOIN stats ON files_ne.fileHash = stats.fileHash GROUP BY fileSLOC")
+```
+
+
+
+
+
+
+```{r}
+
+logHistogram <- function(query, title, xtitle, ytitle, filename = NULL) {
+    linetypes = c("Median" = "solid", "Mean" = "dashed")
+
+    query = sql.query(query)[[1]]
+    # because we are log hist, do log
+    #query = log10(query + 1)
+    data = data.frame(x = query)
+    # calculate the breaks so that we fill the range
+    breaks = 1
+    i = 1
+    m = max(query, na.rm = T)
+    repeat {
+        i = i * 10
+        breaks = c(breaks, i + 1)
+        if (log10(i + 1) > m)
+            break
+    }
+    breaks = log10(breaks)
+    # draw the graph
+    g = ggplot(data)
+    g = g + geom_histogram(binwidth = 0.2, boundary = 0, aes(x = log10(x + 1), y=..count../sum(..count..)))
+    # add mean & median vertical lines
+    x_mean = log10(mean(query) + 1)
+    x_median = log10(median(query) + 1)
+    g <- g + geom_vline(aes(xintercept = x_mean, linetype = "Mean"), alpha = 1)
+    g <- g + geom_vline(aes(xintercept = x_median, linetype = "Median"), alpha = 1)
+    g = g + scale_x_continuous(paste(xtitle, "(log)"), labels = function(x) plain(10**x - 1), breaks = breaks) + theme(axis.text.y = element_text(angle=90, hjust = 0.5)) + scale_y_continuous(ytitle, labels=function(x) x * 100)
+    g = g + scale_linetype_manual(name="Statistics", values = linetypes)
+    
+    g = g + ggtitle(title)
+    g = g + theme(plot.title = element_text(hjust = 0.5))
+    if (!is.null(filename))
+        ggsave(filename, width = 68 * 2.5, height = 55 * 2.5, units = "mm")
+    g
+}
+```
+
+
+```{r}
+
+lang = "js"
+langLong = "JavaScript"
+
+#figure 2 - files per project, non empty
+logHistogram("SELECT files_ne FROM projects LIMIT 10000", langLong, "Number of files", " % of projects", paste("Hist_files_per_project_",lang,".pdf", sep = ""))
+
+```
+
+
+```{r}
+#figure 3 - stars per project
+logHistogram("SELECT stars FROM projects", langLong, "Number of stars", "% of projects", paste("Hist_stars_per_project_", lang, ".pdf", sep=""))
+#figure 4 - commits per project
+logHistogram("SELECT commits FROM projects", langLong, "Number of commits", "% of projects", paste("Hist_commits_per_project_", lang, ".pdf", sep=""))
+```
+
+```{r}
+# figure ? - SLOC per file
+logHistogram("SELECT fileSLOC FROM files_ne JOIN stats ON files_ne.fileHash = stats.fileHash LIMIT 100000", langLong, "Number of SLOC", "% of projects", paste("Hist_sloc_per_file_", lang, ".pdf", sep = ""))
+```
+
+
+
+## A simple Histogram - Files per projects
+
+> [original](https://github.com/Mondego/github-clones-paper/blob/master/figures/Hist_files_per_project_js.png) used in the paper
+
+
+
+```{r}
+files_per_project = data.frame(sql.query("SELECT files FROM projects"))
+summary(files_per_project)
+```
+
+
+```{r}
+plain <- function(x,...) {
+   format(x, ..., scientific = FALSE, trim = TRUE)
+}
+
+ggplot(files_per_project, aes(x = files)) +
+  geom_histogram(binwidth = 0.2, boundary = 0, aes(x = log10(files + 1))) +
+  theme_linedraw() + scale_x_continuous("Number of Files (log)", labels = function(x) plain(10**x - 1), breaks = log10(c(1,11,101,1001,10001,100001))) + theme(axis.text.y = element_text(angle=90, hjust = 0.5)) + scale_y_continuous("# of projects", labels=plain)
+```
+
+Single histogram, as if in the paper. Changes: Shows the empty projects properly (we probably want to show them here)
+
+```{r}
+# a new histogram, select colors automatically, select 
+fpp_js = sql.query("SELECT files FROM js.projects")$files
+fpp_js_nonpm = sql.query("SELECT files FROM js_nonpm.projects")$files
+#fpp_cpp = sql.query("SELECT files FROM cpp.projects")$files
+```
+
+```{r}
+
+datasets = c(
+    "js" = "JavaScript",
+    "js_nonpm" = "JavaScript w/o NPM",
+    "cpp" = "C++",
+    "java" = "Java",
+    "py" = "Python"
+)
+
+plain <- function(x,...) {
+   format(x, ..., scientific = FALSE, trim = TRUE)
+}
+
+
+maxl = max(length(fpp_js), length(fpp_js_nonpm))
+
+length(fpp_js) = maxl
+length(fpp_js_nonpm) = maxl
+fpp = data.frame("js" = fpp_js, "cpp" = fpp_js_nonpm)
+
+#fpp = rbind.fill(
+#    data.frame("js" = fpp_js$files),
+#    data.frame("js_nonpm" = fpp_js_nonpm$files),
+#    data.frame("cpp" = fpp_cpp$files)
+#)
+summary(fpp)
+```
+
+```{r}
+colors = c("JavaScript" = "red", "JavaScript w/o NPM" = "blue")
+linetypes = c("Median" = "solid", "Mean" = "dashed")
+
+g = ggplot(fpp)
+g = g + geom_histogram(binwidth = 0.2, boundary = 0, aes(x = log10(js + 1), y=..count../sum(..count..), fill = "JavaScript"), alpha = 0.5)
+g = g + geom_vline(aes(xintercept = log10(mean(js, na.rm = T) + 1), linetype = "Mean", color = "JavaScript"), alpha = 0.5)
+g = g + geom_vline(aes(xintercept = log10(median(js, na.rm = T) + 1), linetype = "Median", color = "JavaScript"), alpha = 0.5)
+
+g = g + geom_histogram(binwidth = 0.2, boundary = 0, aes(x = log10(cpp + 1), y=..count../sum(..count..), fill = "JavaScript w/o NPM"), alpha = 0.5, show.legend = T)
+g = g + geom_vline(aes(xintercept = log10(mean(cpp, na.rm = T) + 1), linetype = "Mean", color = "JavaScript w/o NPM"), alpha = 0.5)
+g = g + geom_vline(aes(xintercept = log10(median(cpp, na.rm = T) + 1), linetype = "Median", color = "JavaScript w/o NPM"), alpha = 0.5)
+g = g + 
+  theme_linedraw() + scale_x_continuous("Number of Files (log)", labels = function(x) plain(10**x - 1), breaks = log10(c(1,11,101,1001,10001,100001))) + theme(axis.text.y = element_text(angle=90, hjust = 0.5)) + scale_y_continuous("% of projects", labels=function(x) x * 100)
+g = g + scale_fill_manual(name="Languages",values = colors)
+g = g + scale_linetype_manual(name="Statistics", values = linetypes)
+g = g + scale_color_manual(values=colors, guide = "none")
+
+
+g
+ggsave("haha.pdf")
+
+
+```
+
+
+
+
+```{r}
+ggplot(fpp, aes(x = "js", y = log10(js + 1))) + geom_boxplot() +
+ stat_summary(fun.y="mean", geom="point", shape=23, size=3, fill="white")
+```
+
+```{r}
+bytes_per_file = sql.query("SELECT fileBytes FROM files JOIN stats ON files.fileHash = stats.fileHash")$fileBytes
+```
+
+
+```{r}
+summary(bytes_per_file)
+```
+
+
+
+
+```{r}
+
+ggplot(files_per_project, aes(x = files)) +
+  geom_histogram(binwidth = 0.2, aes(x = log10(files + 1), y=..count../sum(..count..)), fill = "blue", alpha = 0.2, show.legend = T) +
+  geom_histogram(binwidth = 0.2, aes(x = log10(files + 1) + 1, y=..count../sum(..count..)), fill = "red", alpha = 0.2, show.legend = T) +
+  geom_histogram(binwidth = 0.2, aes(x = log10(files + 1) + 2, y=..count../sum(..count..)), fill = "green", alpha = 0.2, show.legend = T) +
+  theme_linedraw() + scale_x_continuous("Number of Files (log)", labels = function(x) plain(10**x - 1), breaks = log10(c(1,11,101,1001,10001,100001))) + theme(axis.text.y = element_text(angle=90, hjust = 0.5)) + scale_y_continuous("% of projects", labels=plain)
+```
+Multiple histograms shown in same graph. Looks kind of messy. 
+
+
+```{r}
+ggplot(files_per_project, aes(x = files)) +
+  geom_histogram(binwidth = 0.2, aes(x = log10(files + 1), y=..count../sum(..count..)), fill = "red", alpha = 0.2) +
+  geom_freqpoly(binwidth = 0.2, aes(x = log10(files + 1), y=..count../sum(..count..)), colour = "red", alpha = 1, origin = 0, linetype = 1) +
+  geom_freqpoly(binwidth = 0.2, aes(x = log10(files + 1), y=..count../sum(..count..)), colour = "blue", alpha = 0.5, origin = 0, linetype = 1, position = position_nudge(x = -0.1)) +
+  theme_linedraw() + scale_x_continuous("Number of Files (log)", labels = function(x) plain(10**x - 1), breaks = log10(c(1,11,101,1001,10001,100001))) + theme(axis.text.y = element_text(angle=90, hjust = 0.5)) + scale_y_continuous("% of projects", labels = function (x) x * 100)
+```
+Comparison of histogram and frequency curve. filled is the histogram, red is the proper frequency curve, blue is the "adjusted" frequency curve, corresponding to the notion of the discrete bins to the left (thanks to the logarithmic nature of the x axis, the first bin corresponds to projects with NO files, the second to projects with 1 file, etc... Only later do the bins contain variety)
+
+
+
+```{r}
+ggplot(files_per_project, aes(x = files)) +
+  geom_freqpoly(binwidth = 0.2, aes(x = log10(files + 1), y=..count../sum(..count..)), colour = "black", alpha = 1, origin = 0, linetype = 1) +
+  geom_freqpoly(binwidth = 0.2, aes(x = log10(files + 1) + 1, y=..count../sum(..count..)), colour = "black", alpha = 1, origin = 0, linetype = 2) +
+  geom_freqpoly(binwidth = 0.2, aes(x = log10(files + 1) + 2, y=..count../sum(..count..)), colour = "black", alpha = 1, origin = 0, linetype = 3) +
+  theme_linedraw() + scale_x_continuous("Number of Files (log)", labels = function(x) plain(10**x - 1), breaks = log10(c(1,11,101,1001,10001,100001))) + theme(axis.text.y = element_text(angle=90, hjust = 0.5)) + scale_y_continuous("% of projects", labels = function (x) x * 100)
+```
+
+Preview of multiple languages in same graph histogram in BW, different line types used instead. Because different languages have different # of projects, the graph does not show actual project counts, but % of projects falling into the bin. (So do the aggregate graphs above).
+
+
+# Heat map
+
+```{r}
+
+
+#data = data.frame(sql.query("SELECT files, stars, commits FROM projects WHERE files > 0 AND stars > -1 AND commits > -1"))
+
+data = read.csv("/data/ecoop17/datasets/jsHalf/heatmap.csv", header = F, col.names = c("pid", "stars", "commits", "files", "originalFiles","containsClones"))
+
+
+#g = ggplot(data, aes(files, stars))
+#g = g + geom_raster(aes(fill = containsClones))
+#g
+```
+
+```{r}
+# create the matrix
+len_x = ceiling(log10(max(data$files) + 1) / 0.2) + 1
+len_y = ceiling(log10(max(data$commits) + 1) / 0.2) + 1
+density = matrix(0, len_x, len_y)
+sumFiles = matrix(0, len_x, len_y)
+sumOriginalFiles = matrix(0, len_x, len_y)
+sumContainsClones = matrix(0, len_x, len_y) 
+total = 0
+#for (i in 1:10000) {
+for (i in 1:length(data$files)) {
+    x = ceiling(log10(data$files[[i]] + 1) / 0.2) + 1
+    y = ceiling(log10(data$commits[[i]] + 1) / 0.2) + 1
+    density[x,y] = density[x,y] + 1
+    sumFiles[x,y] = sumFiles[x,y] + data$files[[i]]
+    sumOriginalFiles[x,y] = sumOriginalFiles[x,y] + data$originalFiles[[i]]
+    sumContainsClones[x,y] = sumContainsClones[x,y] + data$containsClones[[i]]
+    total = total + 1
+}
+
+# convert the matrix to data.frame
+files = double()
+stars = double()
+d = double()
+sf = double()
+sof = double()
+scc = double()
+originality = double()
+avgClones = double()
+for (i in 1:len_x) {
+    for (j in 1:len_y) {
+        files = c(files, (i - 1) * 0.2)
+        stars = c(stars, (j - 1) * 0.2)
+        d = c(d, density[i,j])
+        sf = c(sf, sumFiles[i,j])
+        sof = c(sof, sumOriginalFiles[i,j])
+        scc = c(scc, sumContainsClones[i,j])
+        originality = c(originality, sumOriginalFiles[i, j] / sumFiles[i,j])
+        avgClones = c(avgClones, sumContainsClones[i, j] / density[i,j])
+    } 
+}
+heat_data = data.frame(files = files, stars = stars, density = d, originality = originality, avgClones = avgClones, sumFiles = sf, sumOriginalFiles = sof, sumContainsClones = scc)
+```
+
+```{r}
+g = ggplot(heat_data, aes(files, stars))
+g = g + geom_raster(aes(fill = originality))
+g
+```
+
+
+
+
+
+
+
+
+
+
+#g = ggplot(data, aes(files, stars))
+#g = g + geom_point()
+#g
+
+# (p <- ggplot(nba.m, aes(variable, Name)) + geom_tile(aes(fill = rescale),
+#+     colour = "white") + scale_fill_gradient(low = "white",
+#+     high = "steelblue"))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

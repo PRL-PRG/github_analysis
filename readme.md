@@ -1,3 +1,12 @@
+# TODO for paper
+
+- import dataset
+- create non-npm dataset
+- redo clone finder so that we have confidence in the data
+- redo the graphs
+- 
+
+
 # Reproducing the GitHub Analysis 
 
 This repository contains the necessary information to reproduce the github analysis paper for the languages presented. 
@@ -22,21 +31,21 @@ Many of the steps mentioned below take unfeasible ammounts of time for the revie
 
 > Project cloning information for all non-empty files took around 5 hours. Data import is another 7 hours.
 
-
 - run SourcererCC clone detection
 
-- ...
+> this needs huge machine
 
+- do aggretation & graphs, visualization
 
-- [create summaries and graphs](docs/visualization.md)
-
-> TODO
+> Detailed information in `scripts/` in `graphs.Rmd` and `heatmaps.Rmd`
 
 ## Hardware Requirements
 
 ### Disk Requirements
 
 At least 1TB of disk space is recommended, if all steps are to be followed for all languages, more may be needed. For instance, raw data from the JavaScript tokenizer amount to `170GB`, which shrinks to  `100GB` after merging. The database alone has similar requirements. 
+
+> This does not include space needed to obtain *all* C++, Java and Python projects. 
 
 ### Machines Used
 

@@ -27,6 +27,10 @@ You can now call the high-level import functions, which usually take the databas
     importDataset("python", "/datasets/python")
     importDataset("java", "/datasets/java")
 
+To import SourcererCC, make sure it is stored in `sourcerer.csv` and run the following:
+
+    importSourcerer("js", "/datasets/js")
+
 # Extra Information
 
 ## JavaScript Extra Information
@@ -68,3 +72,8 @@ where the arguments are:
 
 The script adds the `npm` and `test` flags to each of the files in origin database, creates `files_nm` table which contains all the extra information described above and creates the `js_nonpm` database which would contain `projects`, `files`, and `stats` tables with only non-NPM package files (all projects will be kept, but their file counts would reflect only non-NPM files).
 
+## Non-Empty Files
+
+Run `createNonEmptyFiles` from `functions.R`, which creates the `files_ne` table containing id's and filehashes of non-empty files only and adds a `files_ne` column to the projects table. 
+
+A file is considered as empty if it has 0 tokens. 

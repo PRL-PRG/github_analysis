@@ -40,6 +40,16 @@ To import the data back into the database, use the `importCloneFinderData` funct
 
     importCloneFinderData("js", "/datasets/js", 8)
 
+## Common Queries
+
+> This comes from the googledoc which specifies the SQL commands to execute on the table for the paper:
+
+    select count(*) from (select distinct cloneId from projectClones where cloneCloningPercent >= 50 union select distinct hostId from projectClones where hostAffectedPercent >= 50) as combined;
+    select count(*) from (select distinct cloneId from projectClones where cloneCloningPercent >= 80 union select distinct hostId from projectClones where hostAffectedPercent >= 80) as combined
+    select count(*) from (select distinct cloneId from projectClones where cloneCloningPercent = 100 union select distinct hostId from projectClones where hostAffectedPercent = 100) as combined
+    select count(*) from (select distinct cloneId from projectClones where cloneCloningPercent = 100 and hostAffectedPercent = 100 union select distinct hostId from projectClones where cloneCloningPercent = 100 and hostAffectedPercent = 100) as combined;
+    select count(*) from (select distinct cloneId from projectClones where cloneCloningPercent = 100 and hostAffectedPercent = 100 and cloneTotalFiles >= 10 union select distinct hostId from projectClones where cloneCloningPercent = 100 and     hostAffectedPercent = 100 and hostTotalFiles >= 10) as combined;
+
 
 ## Technical Details
 
